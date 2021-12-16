@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-dns-recorder
+spec:
+  selector:
+    matchLabels:
+      app: node-dns-recorder
+  template:
+    metadata:
+      labels:
+        app: node-dns-recorder
+    spec:
+      containers:
+      - name: node-dns-recorder
+        image: ghcr.io/infonova/node-dns-recorder:v0.1.0
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"

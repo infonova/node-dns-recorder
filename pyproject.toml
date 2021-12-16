@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "node-dns-recorder"
+version = "0.1.0"
+description = ""
+authors = ["Bearingpoint"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+kopf = "^1.35.3"
+kubernetes = "^21.7.0"
+
+[tool.poetry.dev-dependencies]
+rope = "^0.22.0"
+flake8 = "^4.0.1"
+black = "^21.12b0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
