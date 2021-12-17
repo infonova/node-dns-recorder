@@ -15,11 +15,25 @@ NDR_DOMAINS = os.getenv("NDR_DOMAINS", ".cluster.local,k8s.local").split(",")
 NDR_HOSTS_FILE = "ndr-hosts"
 """NDR_HOSTS_FILE is the file name of the hosts file which the operator writes to the CoreDNS configmap"""
 
+NDR_HOSTS_SNIPPET_FILE = "ndr-hosts-snippet"
+
+NDR_HOSTS_SNIPPET = f"""hosts /etc/coredns/{NDR_HOSTS_FILE} {' '.join(NDR_DOMAINS)} {{
+    fallthrough
+}}
+"""
+
 NDR_COREFILE_ANCHOR = "forward"
 """NDR_COREFILE_ANCHOR is the anchor the operator uses to patch in the hosts plugin to the Corefile of CoreDNS"""
 
-NDR_COREFILE_PATCH = fr"\g<1>hosts /etc/coredns/{NDR_HOSTS_FILE} {{\g<1>  fallthrough\g<1>}}\g<1>{NDR_COREFILE_ANCHOR}\g<2>"
+NDR_GUARD_BEGIN = "# BEGIN managed by NDR"
+NDR_GUARD_END = "# END managed by NDR"
+
+NDR_COREFILE_PATCH = f"""{NDR_GUARD_BEGIN}
+    import /etc/coredns/{NDR_HOSTS_SNIPPET_FILE}
+    {NDR_GUARD_END}
+    """
 """NDR_COREFILE_PATCH defines the patch configuration for patching in the hosts file to the Corefile"""
+
 
 NDR_STATE = {"hosts": {}, "hash": ""}
 """NDR_STATE represents the current state which the operator needs to write to the config map"""
@@ -62,20 +76,29 @@ async def patch_coredns_deployment(namespace, name, **_):
 )
 async def patch_coredns_configmap(namespace, name, body, **_):
     corefile = body.get("data").get("Corefile")
-    if "hosts" not in corefile:
-        patched_corefile = re.sub(
-            fr"(\s.*){NDR_COREFILE_ANCHOR}(.*)", NDR_COREFILE_PATCH, corefile
-        )
 
-        core_v1 = client.CoreV1Api()
-        core_v1.patch_namespaced_config_map(
-            name=name,
-            namespace=namespace,
-            body={
-                "metadata": {"annotations": {NDR_ANNOTATION_KEY: "true"}},
-                "data": {"Corefile": patched_corefile},
+    anchor_index = corefile.index(NDR_COREFILE_ANCHOR)
+    begin_index = (
+        corefile.find(NDR_GUARD_BEGIN)
+        if corefile.find(NDR_GUARD_BEGIN) > 0
+        else anchor_index
+    )
+    patched_corefile = (
+        corefile[:begin_index] + NDR_COREFILE_PATCH + corefile[anchor_index:]
+    )
+
+    core_v1 = client.CoreV1Api()
+    core_v1.patch_namespaced_config_map(
+        name=name,
+        namespace=namespace,
+        body={
+            "metadata": {"annotations": {NDR_ANNOTATION_KEY: "true"}},
+            "data": {
+                "Corefile": patched_corefile,
+                NDR_HOSTS_SNIPPET_FILE: NDR_HOSTS_SNIPPET,
             },
-        )
+        },
+    )
 
 
 @kopf.on.event("", "v1", "node")
